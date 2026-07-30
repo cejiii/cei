@@ -11,14 +11,14 @@
 </head>
 <body>
 
-<!-- BACKGROUND CANVAS (pointer-events:none so panels work, JS listens via document) -->
+
 <canvas id="bgCanvas"></canvas>
 <!-- Hover tooltip -->
 <div id="bgTooltip" class="bg-tooltip"></div>
 <!-- Floating particles -->
 <div id="particles"></div>
 
-<!-- ░░ APP ░░ -->
+
 <div class="app-wrapper">
 
   <!-- LOGO + TABS -->
@@ -40,7 +40,7 @@
     </nav>
   </header>
 
-  <!-- ░░ SEND PANEL ░░ -->
+
   <main class="panel" id="sendPanel">
     <div id="formArea">
       <div class="eyebrow">anonymous message</div>
@@ -48,7 +48,7 @@
       <p class="panel-sub">Your words. Their heart. Your secret.</p>
       <div class="divider"></div>
 
-      <!-- TO -->
+
       <div class="field-group">
         <label class="field-label" for="toField"><span class="dot"></span>Recipient</label>
         <div class="input-wrap">
@@ -57,7 +57,7 @@
         </div>
       </div>
 
-      <!-- MESSAGE -->
+
       <div class="field-group">
         <label class="field-label" for="msgField"><span class="dot"></span>Message</label>
         <div class="textarea-wrap">
@@ -66,7 +66,7 @@
         </div>
       </div>
 
-      <!-- SONG PICKER -->
+
       <div class="field-group">
         <label class="field-label">
           <span class="dot spotify-dot"></span>
@@ -85,7 +85,7 @@
         <div class="song-selected" id="songSelected" style="display:none"></div>
       </div>
 
-      <!-- DELIVERY STYLE -->
+
       <div class="field-group">
         <label class="field-label"><span class="dot" style="background:#e879f9;box-shadow:0 0 6px #e879f9;"></span>Delivery Style</label>
         <div class="style-grid">
@@ -99,14 +99,13 @@
         </div>
       </div>
 
-      <!-- LIVE PREVIEW -->
       <div class="preview-strip">
         <div class="preview-to"  id="previewTo">For <em>someone special</em></div>
         <div class="preview-msg" id="previewMsg">Your message will appear here…</div>
         <div class="preview-song" id="previewSong" style="display:none"></div>
       </div>
 
-      <!-- SEND -->
+  
       <button class="send-btn" id="sendBtn" onclick="sendMsg()">
         <span class="send-inner">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -119,7 +118,7 @@
       </div>
     </div>
 
-    <!-- SUCCESS STATE -->
+ 
     <div class="success-screen" id="successScreen">
       <div class="success-orb">
         <div class="orb-ring"></div><div class="orb-ring r2"></div>
@@ -134,7 +133,7 @@
     </div>
   </main>
 
-  <!-- ░░ MESSAGES PANEL ░░ -->
+  
   <main class="panel hidden" id="messagesPanel">
     <div class="eyebrow">your messages</div>
     <div class="messages-header">
@@ -165,13 +164,13 @@
 
 </div><!-- /app-wrapper -->
 
-<!-- ░░ REVEAL OVERLAY (cinematic entrance) ░░ -->
+
 <div id="revealOverlay" class="reveal-overlay" onclick="closeReveal()">
 
-  <!-- Cinematic animation stage -->
+
   <canvas id="revealCanvas" class="reveal-canvas"></canvas>
 
-  <!-- Message card (appears after animation) -->
+
   <div class="reveal-card" id="revealCard" onclick="event.stopPropagation()">
     <button class="reveal-x" onclick="closeReveal()">✕</button>
     <div class="reveal-emoji"    id="revealEmoji"></div>
