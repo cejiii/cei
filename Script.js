@@ -1,42 +1,3 @@
-/* ═══════════════════════════════════════════════════
-   WHISPR — script.js  v4
-   • "Messages" tab with search by To: name
-   • Cinematic reveal animation per delivery style
-   • Background objects clickable anywhere on canvas
-   • iTunes API song search (no auth needed)
-═══════════════════════════════════════════════════ */
-
-/* ═══════════════════════════════════════════════
-   DATABASE (Supabase)
-   1. Create a project at https://supabase.com
-   2. Run the SQL below in the Supabase SQL Editor
-   3. Paste your Project URL + anon public key here
-
-   ---------------------------------------------------
-   create extension if not exists pgcrypto;
-
-   create table messages (
-     id         uuid primary key default gen_random_uuid(),
-     to_name    text not null,
-     message    text not null,
-     style      text not null,
-     song       jsonb,
-     opened     boolean not null default false,
-     created_at timestamptz not null default now()
-   );
-
-   alter table messages enable row level security;
-
-   -- Anonymous app: anyone can send, read, and mark opened.
-   create policy "anyone can read"   on messages for select using (true);
-   create policy "anyone can insert" on messages for insert with check (true);
-   create policy "anyone can update" on messages for update using (true);
-
-   -- Realtime (lets other open tabs see new messages live)
-   alter publication supabase_realtime add table messages;
-   ---------------------------------------------------
-═══════════════════════════════════════════════ */
-
 
 const SUPABASE_URL      = 'https://jsivookqnunyafuknsqf.supabase.co';
 
@@ -63,18 +24,18 @@ function rowToItem(row){
   };
 }
 
-/* ─── STATE ─── */
+
 let selectedStyle = 'bottle';
-let inbox         = [];      // {id, to, message, style, song, opened}
-let bgObjects     = [];      // live canvas sprites
+let inbox         = [];      
+let bgObjects     = [];      
 let bgRaf         = null;
 let bgT           = 0;
 let currentTab    = 'send';
 let selectedSong  = null;
 let songDebounce  = null;
 let hoveredObj    = null;
-let revealAnim    = null;    // RAF for reveal canvas animation
-let revealPhase   = 0;       // time counter for reveal animation
+let revealAnim    = null;    
+let revealPhase   = 0;       
 
 const STYLE_META = {
   bottle:  { emoji:'🌊', label:'Floating Bottle'  },
@@ -86,7 +47,7 @@ const STYLE_META = {
   space:   { emoji:'🚀', label:'Space Delivery'   },
 };
 
-/* ─── UTILS ─── */
+
 const lerp  = (a,b,t)   => a+(b-a)*t;
 const clamp = (v,a,b)   => Math.max(a,Math.min(b,v));
 const rand  = (a,b)     => a+Math.random()*(b-a);
@@ -94,7 +55,7 @@ const randI = (a,b)     => Math.floor(rand(a,b+1));
 const ease  = t          => 1-Math.pow(1-t,3);
 const easeIO= t          => t<.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2;
 
-/* ─── DOM PARTICLES ─── */
+
 (function(){
   const c=document.getElementById('particles');
   for(let i=0;i<28;i++){
@@ -109,9 +70,7 @@ const easeIO= t          => t<.5 ? 4*t*t*t : 1-Math.pow(-2*t+2,3)/2;
   }
 })();
 
-/* ═══════════════════════════════════════════════
-   TABS
-═══════════════════════════════════════════════ */
+
 function switchTab(tab){
   currentTab = tab;
   document.getElementById('sendPanel').classList.toggle('hidden', tab!=='send');
@@ -120,9 +79,7 @@ function switchTab(tab){
   if(tab==='messages') renderMessages();
 }
 
-/* ═══════════════════════════════════════════════
-   SEND FORM
-═══════════════════════════════════════════════ */
+
 function updateCount(){
   const len = document.getElementById('msgField').value.length;
   const el  = document.getElementById('charCount');
@@ -227,9 +184,7 @@ function resetForm(){
   clearSong();
 }
 
-/* ═══════════════════════════════════════════════
-   SONG SEARCH (iTunes API — no auth)
-═══════════════════════════════════════════════ */
+
 function debounceSongSearch(){
   clearTimeout(songDebounce);
   songDebounce = setTimeout(doSongSearch, 340);
@@ -312,9 +267,7 @@ document.addEventListener('click',e=>{
     document.getElementById('songResults').classList.remove('open');
 });
 
-/* ═══════════════════════════════════════════════
-   MESSAGES PANEL
-═══════════════════════════════════════════════ */
+
 function updateBadge(){
   const n = inbox.filter(m=>!m.opened).length;
   const b = document.getElementById('msgBadge');
@@ -388,9 +341,7 @@ function openMessage(idx){
   showReveal(item);
 }
 
-/* ═══════════════════════════════════════════════
-   REVEAL MODAL — cinematic entrance per style
-═══════════════════════════════════════════════ */
+
 const revealCanvas  = document.getElementById('revealCanvas');
 const revealCtx     = revealCanvas.getContext('2d');
 const revealOverlay = document.getElementById('revealOverlay');
@@ -406,7 +357,7 @@ window.addEventListener('resize', resizeRevealCanvas);
 function showReveal(msg){
   const meta = STYLE_META[msg.style];
 
-  // Fill card content
+
   document.getElementById('revealEmoji').textContent    = meta.emoji;
   document.getElementById('revealTo').innerHTML         = `For <strong>${msg.to}</strong>`;
   document.getElementById('revealText').textContent     = msg.message;
@@ -423,12 +374,12 @@ function showReveal(msg){
     sc.style.display='none';
   }
 
-  // Show overlay
+  
   revealOverlay.classList.add('open');
   document.body.style.overflow='hidden';
   revealCardEl.classList.remove('card-in');
 
-  // Run cinematic animation, then show card
+ 
   revealPhase=0;
   cancelAnimationFrame(revealAnim);
   runRevealAnim(msg.style, ()=>{
@@ -446,7 +397,7 @@ function closeReveal(){
 }
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeReveal(); });
 
-/* ─── Reveal animation dispatcher ─── */
+
 function runRevealAnim(style, onDone){
   const anims = {
     bottle:  revealAnimBottle,
@@ -474,7 +425,7 @@ function revealAnimBase(drawFn, totalFrames, onDone){
   revealAnim=requestAnimationFrame(tick);
 }
 
-/* 🌊 BOTTLE reveal — ocean rises from bottom */
+
 function revealAnimBottle(onDone){
   revealAnimBase((ctx,W,H,p,t)=>{
     // Dark overlay fades in
@@ -492,13 +443,13 @@ function revealAnimBottle(onDone){
       ctx.fillStyle=`rgba(${layer===0?'7,89,133':'14,116,144'},${.18+layer*.06})`;
       ctx.fill();
     }
-    // Glitter on water
+    
     if(t%4===0) for(let i=0;i<6;i++){
       const gx=rand(0,W), gy=waveTop+rand(-10,40);
       ctx.beginPath(); ctx.arc(gx,gy,rand(.5,2),0,Math.PI*2);
       ctx.fillStyle=`rgba(125,211,252,${rand(.3,.8)})`; ctx.fill();
     }
-    // Giant bottle rising from water
+    
     const bottleY=lerp(H+80,H*.35,ease(p));
     ctx.save(); ctx.translate(W*.5,bottleY);
     ctx.rotate(Math.sin(t*.04)*.06);
@@ -508,12 +459,12 @@ function revealAnimBottle(onDone){
   }, 90, onDone);
 }
 
-/* ✉️ LETTER reveal — envelope zips in from right */
+
 function revealAnimLetter(onDone){
   const sparks=Array.from({length:20},()=>({x:0,y:0,vx:rand(-4,4),vy:rand(-5,-1),life:0,maxLife:rand(40,70),born:60}));
   revealAnimBase((ctx,W,H,p,t)=>{
     ctx.fillStyle=`rgba(10,5,30,${p*.88})`; ctx.fillRect(0,0,W,H);
-    // Stars
+   
     for(let i=0;i<60;i++){
       const a=.3+Math.sin(t*.04+i)*.2;
       ctx.beginPath(); ctx.arc((i*137.5)%W,(i*89.3)%(H*.6),.8,0,Math.PI*2);
@@ -521,12 +472,12 @@ function revealAnimLetter(onDone){
     }
     const ex=lerp(W+120,W*.5,ease(Math.min(p/.6,1)));
     const ey=lerp(H*.2,H*.38,ease(Math.min(p/.6,1)));
-    // Motion lines
+    
     if(p<.6) for(let l=1;l<=4;l++){
       ctx.beginPath(); ctx.moveTo(ex-l*28,ey-l*7); ctx.lineTo(ex-l*28+22,ey-l*7);
       ctx.strokeStyle=`rgba(165,180,252,${.25-l*.05})`; ctx.lineWidth=2; ctx.stroke();
     }
-    // Burst sparks at arrival
+   
     if(t>=60){
       sparks.forEach(s=>{
         const age=t-s.born; if(age<0||age>s.maxLife) return;
@@ -541,15 +492,15 @@ function revealAnimLetter(onDone){
   }, 90, onDone);
 }
 
-/* 🕊️ DOVE reveal — dove glides diagonally */
+
 function revealAnimDove(onDone){
   revealAnimBase((ctx,W,H,p,t)=>{
-    // Dawn sky
+    
     const sky=ctx.createLinearGradient(0,0,0,H);
     sky.addColorStop(0,`rgba(5,46,22,${p*.9})`);
     sky.addColorStop(1,`rgba(2,20,10,${p*.9})`);
     ctx.fillStyle=sky; ctx.fillRect(0,0,W,H);
-    // Clouds
+   
     [[.2,.15],[.7,.1],[.5,.22]].forEach(([cx,cy],i)=>{
       ctx.save(); ctx.translate(W*cx+Math.sin(t*.01+i)*10,H*cy);
       ctx.scale(1+i*.4,1); ctx.globalAlpha=p*.3;
@@ -560,7 +511,7 @@ function revealAnimDove(onDone){
     });
     const dx=lerp(-80,W*.5,ease(Math.min(p/.7,1)));
     const dy=lerp(H*.1,H*.38,ease(Math.min(p/.7,1)));
-    // Feather trail
+    
     if(p<.7&&t%8===0){
       ctx.save(); ctx.translate(dx-20,dy-5); ctx.rotate(rand(-.3,.3));
       ctx.fillStyle='rgba(255,255,255,.4)';
@@ -573,20 +524,20 @@ function revealAnimDove(onDone){
   }, 90, onDone);
 }
 
-/* ⭐ STAR reveal — shooting star streaks screen */
+
 function revealAnimStar(onDone){
   const stars=Array.from({length:140},()=>({
     x:rand(0,1),y:rand(0,1),r:rand(.5,1.8),twinkle:rand(0,Math.PI*2)
   }));
   revealAnimBase((ctx,W,H,p,t)=>{
     ctx.fillStyle=`rgba(4,2,20,${p*.95})`; ctx.fillRect(0,0,W,H);
-    // Star field
+    
     stars.forEach(s=>{
       const a=.4+Math.sin(t*.05+s.twinkle)*.3;
       ctx.beginPath(); ctx.arc(s.x*W,s.y*H,s.r,0,Math.PI*2);
       ctx.fillStyle=`rgba(255,255,255,${a*p})`; ctx.fill();
     });
-    // Shooting star streaks across
+    
     const streakP=clamp(p/.55,0,1);
     if(streakP<1){
       const sx=lerp(-60,W+60,streakP);
@@ -600,7 +551,7 @@ function revealAnimStar(onDone){
       ctx.beginPath(); ctx.arc(sx,sy,6,0,Math.PI*2);
       ctx.fillStyle='#fef08a'; ctx.fill();
     }
-    // Burst when streak ends (p>.55)
+    
     const burstP=clamp((p-.55)/.35,0,1);
     if(burstP>0){
       const cx=W*.5+60,cy=H*.4;
@@ -619,7 +570,7 @@ function revealAnimStar(onDone){
   }, 95, onDone);
 }
 
-/* 🏮 LANTERN reveal — glowing lantern descends */
+
 function revealAnimLantern(onDone){
   const motes=Array.from({length:30},()=>({x:rand(0,1),vy:rand(-.5,-.15),vx:rand(-.2,.2),life:rand(0,1),size:rand(1,3)}));
   revealAnimBase((ctx,W,H,p,t)=>{
@@ -633,7 +584,7 @@ function revealAnimLantern(onDone){
       ctx.beginPath(); ctx.arc((i*137.5)%W,(i*89.3)%(H*.7),.7,0,Math.PI*2);
       ctx.fillStyle=`rgba(255,255,200,${a*p})`; ctx.fill();
     }
-    // Motes
+   
     motes.forEach(m=>{
       m.life+=.012; if(m.life>1) m.life=0;
       const a=Math.sin(m.life*Math.PI)*p;
@@ -652,35 +603,35 @@ function revealAnimLantern(onDone){
   }, 90, onDone);
 }
 
-/* 📜 SCROLL reveal — scroll unrolls from center */
+
 function revealAnimScroll(onDone){
   revealAnimBase((ctx,W,H,p,t)=>{
     const bg=ctx.createLinearGradient(0,0,W,H);
     bg.addColorStop(0,`rgba(20,14,0,${p*.92})`);
     bg.addColorStop(1,`rgba(40,28,0,${p*.92})`);
     ctx.fillStyle=bg; ctx.fillRect(0,0,W,H);
-    // Magical motes
+    
     for(let i=0;i<30;i++){
       const mx=(i*173.5)%W, my=(H*.5)+Math.sin(t*.04+i)*60;
       const a=.2+Math.sin(t*.06+i)*.15;
       ctx.beginPath(); ctx.arc(mx,my,rand(1,3),0,Math.PI*2);
       ctx.fillStyle=`rgba(202,138,4,${a*p})`; ctx.fill();
     }
-    // Scroll unrolling
+ 
     const openH=lerp(0,H*.55,ease(p));
     const sw=Math.min(W*.6,320), sx=W*.5-sw*.5, sy=H*.5-openH*.5;
     ctx.save();
-    // Parchment
+   
     ctx.fillStyle=`rgba(254,249,195,${p*.85})`;
     ctx.strokeStyle=`rgba(202,138,4,${p*.7})`; ctx.lineWidth=2;
     rrect(ctx,sx,sy,sw,openH,5); ctx.fill(); ctx.stroke();
-    // Lines on parchment
+  
     for(let l=0;l<8;l++){
       const ly=sy+20+l*30; if(ly>sy+openH-18) break;
       ctx.beginPath(); ctx.moveTo(sx+16,ly); ctx.lineTo(sx+sw-16,ly);
       ctx.strokeStyle=`rgba(161,116,10,${p*.25})`; ctx.lineWidth=.8; ctx.stroke();
     }
-    // Rollers
+   
     ctx.fillStyle=`rgba(146,64,14,${p*.9})`;
     rrect(ctx,sx-6,sy-8,sw+12,16,7); ctx.fill();
     rrect(ctx,sx-6,sy+openH-8,sw+12,16,7); ctx.fill();
@@ -692,7 +643,7 @@ function revealAnimScroll(onDone){
   }, 90, onDone);
 }
 
-/* 🚀 SPACE reveal — rocket descends and lands */
+
 function revealAnimSpace(onDone){
   const stars=Array.from({length:100},()=>({
     x:rand(0,1),y:rand(0,1),r:rand(.5,1.8),c:['255,255,255','180,180,255','255,220,180'][randI(0,2)],tw:rand(0,Math.PI*2)
@@ -707,7 +658,7 @@ function revealAnimSpace(onDone){
       ctx.beginPath(); ctx.arc(s.x*W,s.y*H,s.r,0,Math.PI*2);
       ctx.fillStyle=`rgba(${s.c},${a*p})`; ctx.fill();
     });
-    // Landing pad
+    
     const padY=H*.72;
     ctx.fillStyle=`rgba(100,116,139,${p*.4})`;
     ctx.fillRect(W*.3,padY,W*.4,8);
@@ -730,7 +681,7 @@ function revealAnimSpace(onDone){
   }, 100, onDone);
 }
 
-/* ─── Mini sprite helpers for reveal animations ─── */
+
 function drawMiniBottle(ctx,x,y){
   const bob=0;
   ctx.fillStyle='rgba(125,211,252,.6)'; ctx.strokeStyle='rgba(186,230,253,.8)'; ctx.lineWidth=.8;
@@ -789,7 +740,7 @@ function drawMiniRocket(ctx,x,y,flame){
   ctx.beginPath(); ctx.moveTo(x-5,y+3); ctx.lineTo(x-12,y+10); ctx.lineTo(x-5,y+10); ctx.closePath(); ctx.fill();
 }
 
-/* helper: rounded rect path */
+
 function rrect(ctx,x,y,w,h,r){
   ctx.beginPath();
   ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
@@ -809,7 +760,7 @@ const bgTooltip = document.getElementById('bgTooltip');
 function resizeBg(){ bgCanvas.width=window.innerWidth; bgCanvas.height=window.innerHeight; }
 resizeBg(); window.addEventListener('resize',resizeBg);
 
-/* Mouse / touch tracking */
+
 let mouseX=0, mouseY=0;
 
 document.addEventListener('mousemove',e=>{
@@ -820,7 +771,7 @@ document.addEventListener('touchmove',e=>{
   if(e.touches.length){ mouseX=e.touches[0].clientX; mouseY=e.touches[0].clientY; }
 },{passive:true});
 
-/* Click detection — fires on document, ignored if panel/modal was target */
+
 document.addEventListener('click',e=>{
   // Ignore clicks that land on any UI element above the canvas
   if(e.target.closest('.app-wrapper,.reveal-overlay,.bg-tooltip')) return;
@@ -831,7 +782,7 @@ document.addEventListener('click',e=>{
   }
 });
 
-/* Touch tap on canvas area */
+
 document.addEventListener('touchend',e=>{
   if(e.target.closest('.app-wrapper,.reveal-overlay,.bg-tooltip')) return;
   if(e.changedTouches.length){
@@ -866,7 +817,7 @@ function handleBgHover(mx,my){
   }
 }
 
-/* Spawn bg sprite */
+
 function spawnBgObj(msg){
   const W=bgCanvas.width, H=bgCanvas.height;
   bgObjects.push({
@@ -890,7 +841,7 @@ function spawnBgObj(msg){
   });
 }
 
-/* BG draw loop */
+
 function drawBg(){
   const W=bgCanvas.width, H=bgCanvas.height;
   bgCtx.clearRect(0,0,W,H);
@@ -929,7 +880,7 @@ function drawBg(){
     }
     bgCtx.restore();
 
-    // Label pill
+    
     bgCtx.globalAlpha=fadeIn*(obj.msgRef.opened?.22:.75);
     const lbl=obj.label+(obj.msgRef.song?' ♫':'');
     bgCtx.font='600 11px Sora,sans-serif';
@@ -957,7 +908,7 @@ function drawNebula(W,H){
   });
 }
 
-/* ─── BG sprite drawers ─── */
+
 function drawBgBottle(obj){
   const ctx=bgCtx, bob=Math.sin(obj.phase)*5, tilt=Math.sin(obj.phase*.7)*.18;
   ctx.save(); ctx.rotate(tilt);
@@ -1065,11 +1016,7 @@ function drawBgSpace(obj){
   obj.particles.forEach(p=>{ p.life+=.02; if(p.life>1){ p.life=0; p.x=rand(-4,4); p.y=bob+22; } const py=bob+22+p.life*40; ctx.beginPath(); ctx.arc(p.x,py,p.size*(1-p.life),0,Math.PI*2); ctx.fillStyle=`rgba(251,146,60,${(1-p.life)*.5})`; ctx.fill(); });
 }
 
-/* ═══════════════════════════════════════════════
-   DATABASE — initial load + realtime sync
-   Loads every message on start, then keeps every
-   open tab (this device or any other) in sync live.
-═══════════════════════════════════════════════ */
+
 async function loadMessages(){
   if(!supabaseClient) return;
 
