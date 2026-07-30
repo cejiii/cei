@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Whispr — Anonymous Courier</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,500;1,400;1,600&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<!-- BACKGROUND CANVAS (pointer-events:none so panels work, JS listens via document) -->
+<canvas id="bgCanvas"></canvas>
+<!-- Hover tooltip -->
+<div id="bgTooltip" class="bg-tooltip"></div>
+<!-- Floating particles -->
+<div id="particles"></div>
+
+<!-- ░░ APP ░░ -->
+<div class="app-wrapper">
+
+  <!-- LOGO + TABS -->
+  <header class="logo-bar">
+    <div class="logo">
+      <span class="logo-star">✦</span>
+      <span class="logo-text">Whispr</span>
+    </div>
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="send" onclick="switchTab('send')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        Send
+      </button>
+      <button class="tab-btn" data-tab="messages" onclick="switchTab('messages')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Messages
+        <span class="badge" id="msgBadge"></span>
+      </button>
+    </nav>
+  </header>
+
+  <!-- ░░ SEND PANEL ░░ -->
+  <main class="panel" id="sendPanel">
+    <div id="formArea">
+      <div class="eyebrow">anonymous message</div>
+      <h1 class="panel-title">Say it<br><em>without your name.</em></h1>
+      <p class="panel-sub">Your words. Their heart. Your secret.</p>
+      <div class="divider"></div>
+
+      <!-- TO -->
+      <div class="field-group">
+        <label class="field-label" for="toField"><span class="dot"></span>Recipient</label>
+        <div class="input-wrap">
+          <span class="input-prefix">To</span>
+          <input type="text" id="toField" placeholder="Their name…" maxlength="60" autocomplete="off" oninput="livePreview()"/>
+        </div>
+      </div>
+
+      <!-- MESSAGE -->
+      <div class="field-group">
+        <label class="field-label" for="msgField"><span class="dot"></span>Message</label>
+        <div class="textarea-wrap">
+          <textarea id="msgField" placeholder="Write something honest, kind, brave — or all three…" maxlength="500" oninput="updateCount();livePreview()"></textarea>
+          <div class="char-pill" id="charCount">0 / 500</div>
+        </div>
+      </div>
+
+      <!-- SONG PICKER -->
+      <div class="field-group">
+        <label class="field-label">
+          <span class="dot spotify-dot"></span>
+          Add a Song
+          <span class="label-badge">Spotify</span>
+          <span style="color:var(--txt3);font-size:9px;margin-left:2px;text-transform:none;letter-spacing:0;">(optional)</span>
+        </label>
+        <div class="song-search-wrap">
+          <div class="song-input-row">
+            <svg class="song-input-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+            <input type="text" id="songSearch" class="song-input" placeholder="Search a song or artist…" autocomplete="off" oninput="debounceSongSearch()" onfocus="onSongFocus()"/>
+            <button class="song-clear-btn" id="songClearBtn" onclick="clearSong()" style="display:none">✕</button>
+          </div>
+          <div class="song-results" id="songResults"></div>
+        </div>
+        <div class="song-selected" id="songSelected" style="display:none"></div>
+      </div>
+
+      <!-- DELIVERY STYLE -->
+      <div class="field-group">
+        <label class="field-label"><span class="dot" style="background:#e879f9;box-shadow:0 0 6px #e879f9;"></span>Delivery Style</label>
+        <div class="style-grid">
+          <button class="style-card active" data-style="bottle"  onclick="selectStyle(this)"><span class="sc-emoji">🌊</span><span class="sc-name">Bottle</span><span class="sc-desc">Ocean drift</span></button>
+          <button class="style-card"        data-style="letter"  onclick="selectStyle(this)"><span class="sc-emoji">✉️</span><span class="sc-name">Letter</span><span class="sc-desc">Fly &amp; open</span></button>
+          <button class="style-card"        data-style="dove"    onclick="selectStyle(this)"><span class="sc-emoji">🕊️</span><span class="sc-name">Dove</span><span class="sc-desc">Wing carry</span></button>
+          <button class="style-card"        data-style="star"    onclick="selectStyle(this)"><span class="sc-emoji">⭐</span><span class="sc-name">Star</span><span class="sc-desc">Night sky</span></button>
+          <button class="style-card"        data-style="lantern" onclick="selectStyle(this)"><span class="sc-emoji">🏮</span><span class="sc-name">Lantern</span><span class="sc-desc">Glow rise</span></button>
+          <button class="style-card"        data-style="scroll"  onclick="selectStyle(this)"><span class="sc-emoji">📜</span><span class="sc-name">Scroll</span><span class="sc-desc">Unravel</span></button>
+          <button class="style-card"        data-style="space"   onclick="selectStyle(this)"><span class="sc-emoji">🚀</span><span class="sc-name">Space</span><span class="sc-desc">Land down</span></button>
+        </div>
+      </div>
+
+      <!-- LIVE PREVIEW -->
+      <div class="preview-strip">
+        <div class="preview-to"  id="previewTo">For <em>someone special</em></div>
+        <div class="preview-msg" id="previewMsg">Your message will appear here…</div>
+        <div class="preview-song" id="previewSong" style="display:none"></div>
+      </div>
+
+      <!-- SEND -->
+      <button class="send-btn" id="sendBtn" onclick="sendMsg()">
+        <span class="send-inner">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          Send Anonymously
+        </span>
+      </button>
+      <div class="privacy-row">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+        Your identity is never revealed
+      </div>
+    </div>
+
+    <!-- SUCCESS STATE -->
+    <div class="success-screen" id="successScreen">
+      <div class="success-orb">
+        <div class="orb-ring"></div><div class="orb-ring r2"></div>
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <h2 class="success-heading">Delivered. ✦</h2>
+      <p class="success-sub" id="successSub"></p>
+      <div class="success-actions">
+        <button class="btn-ghost" onclick="resetForm()">↩ Send another</button>
+        <button class="btn-accent" onclick="switchTab('messages')">View Messages ✦</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ░░ MESSAGES PANEL ░░ -->
+  <main class="panel hidden" id="messagesPanel">
+    <div class="eyebrow">your messages</div>
+    <div class="messages-header">
+      <h2 class="panel-title" style="font-size:clamp(20px,5vw,26px);margin:0;">Messages</h2>
+      <!-- SEARCH BAR -->
+      <div class="msg-search-bar">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="msgSearch" placeholder='Search by "To:" name…' oninput="filterMessages()"/>
+        <button class="msg-search-clear" id="msgSearchClear" onclick="clearMsgSearch()" style="display:none">✕</button>
+      </div>
+    </div>
+    <p class="panel-sub" style="margin-top:.4rem;">Click any floating delivery in the background — or open from the list.</p>
+    <div class="divider"></div>
+
+    <div class="msg-list" id="msgList"></div>
+    <div class="msg-empty" id="msgEmpty">
+      <div class="empty-icon">📭</div>
+      <p class="empty-title">Nothing here yet</p>
+      <p class="empty-sub">Send a message to watch it come alive.</p>
+      <button class="btn-accent" style="margin-top:1.5rem;" onclick="switchTab('send')">Create a message ✦</button>
+    </div>
+    <div class="msg-no-results hidden" id="msgNoResults">
+      <div class="empty-icon" style="font-size:36px;">🔍</div>
+      <p class="empty-title">No results</p>
+      <p class="empty-sub">No messages found for that name.</p>
+    </div>
+  </main>
+
+</div><!-- /app-wrapper -->
+
+<!-- ░░ REVEAL OVERLAY (cinematic entrance) ░░ -->
+<div id="revealOverlay" class="reveal-overlay" onclick="closeReveal()">
+
+  <!-- Cinematic animation stage -->
+  <canvas id="revealCanvas" class="reveal-canvas"></canvas>
+
+  <!-- Message card (appears after animation) -->
+  <div class="reveal-card" id="revealCard" onclick="event.stopPropagation()">
+    <button class="reveal-x" onclick="closeReveal()">✕</button>
+    <div class="reveal-emoji"    id="revealEmoji"></div>
+    <div class="reveal-eyebrow">A message for you</div>
+    <div class="reveal-to"       id="revealTo"></div>
+    <div class="reveal-body"     id="revealText"></div>
+    <div class="reveal-song-card" id="revealSongCard" style="display:none">
+      <div class="rsc-art-wrap"><img id="revealSongArt" src="" alt=""/></div>
+      <div class="rsc-info">
+        <div class="rsc-title"  id="revealSongTitle"></div>
+        <div class="rsc-artist" id="revealSongArtist"></div>
+      </div>
+      <a class="rsc-play" id="revealSongLink" href="#" target="_blank" rel="noopener">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+        Open on Spotify
+      </a>
+    </div>
+    <div class="reveal-delivery" id="revealDelivery"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="script.js"></script>
+</body>
+</html>
