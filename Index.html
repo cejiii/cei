@@ -11,18 +11,13 @@
 </head>
 <body>
 
-
 <canvas id="bgCanvas"></canvas>
-<!-- Hover tooltip -->
 <div id="bgTooltip" class="bg-tooltip"></div>
-<!-- Floating particles -->
 <div id="particles"></div>
-
 
 <div class="app-wrapper">
 
-  <!-- LOGO + TABS -->
-  <header class="logo-bar">
+    <header class="logo-bar">
     <div class="logo">
       <span class="logo-star">✦</span>
       <span class="logo-text">Whispr</span>
@@ -40,16 +35,14 @@
     </nav>
   </header>
 
-
-  <main class="panel" id="sendPanel">
+    <main class="panel" id="sendPanel">
     <div id="formArea">
       <div class="eyebrow">anonymous message</div>
       <h1 class="panel-title">Say it<br><em>without your name.</em></h1>
       <p class="panel-sub">Your words. Their heart. Your secret.</p>
       <div class="divider"></div>
 
-
-      <div class="field-group">
+            <div class="field-group">
         <label class="field-label" for="toField"><span class="dot"></span>Recipient</label>
         <div class="input-wrap">
           <span class="input-prefix">To</span>
@@ -57,17 +50,19 @@
         </div>
       </div>
 
-
-      <div class="field-group">
+            <div class="field-group">
         <label class="field-label" for="msgField"><span class="dot"></span>Message</label>
+        <div class="mode-toggle" id="modeToggle">
+          <button type="button" class="mode-btn active" data-mode="message" onclick="setSendMode('message')">✍️ Your words</button>
+          <button type="button" class="mode-btn" data-mode="lyrics" onclick="setSendMode('lyrics')">🎵 Song lyrics</button>
+        </div>
         <div class="textarea-wrap">
           <textarea id="msgField" placeholder="Write something honest, kind, brave — or all three…" maxlength="500" oninput="updateCount();livePreview()"></textarea>
           <div class="char-pill" id="charCount">0 / 500</div>
         </div>
       </div>
 
-
-      <div class="field-group">
+            <div class="field-group">
         <label class="field-label">
           <span class="dot spotify-dot"></span>
           Add a Song
@@ -85,8 +80,7 @@
         <div class="song-selected" id="songSelected" style="display:none"></div>
       </div>
 
-
-      <div class="field-group">
+            <div class="field-group">
         <label class="field-label"><span class="dot" style="background:#e879f9;box-shadow:0 0 6px #e879f9;"></span>Delivery Style</label>
         <div class="style-grid">
           <button class="style-card active" data-style="bottle"  onclick="selectStyle(this)"><span class="sc-emoji">🌊</span><span class="sc-name">Bottle</span><span class="sc-desc">Ocean drift</span></button>
@@ -99,14 +93,13 @@
         </div>
       </div>
 
-      <div class="preview-strip">
+            <div class="preview-strip">
         <div class="preview-to"  id="previewTo">For <em>someone special</em></div>
         <div class="preview-msg" id="previewMsg">Your message will appear here…</div>
         <div class="preview-song" id="previewSong" style="display:none"></div>
       </div>
 
-  
-      <button class="send-btn" id="sendBtn" onclick="sendMsg()">
+            <button class="send-btn" id="sendBtn" onclick="sendMsg()">
         <span class="send-inner">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           Send Anonymously
@@ -118,8 +111,7 @@
       </div>
     </div>
 
- 
-    <div class="success-screen" id="successScreen">
+        <div class="success-screen" id="successScreen">
       <div class="success-orb">
         <div class="orb-ring"></div><div class="orb-ring r2"></div>
         <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
@@ -133,13 +125,11 @@
     </div>
   </main>
 
-  
-  <main class="panel hidden" id="messagesPanel">
+    <main class="panel hidden" id="messagesPanel">
     <div class="eyebrow">your messages</div>
     <div class="messages-header">
       <h2 class="panel-title" style="font-size:clamp(20px,5vw,26px);margin:0;">Messages</h2>
-      <!-- SEARCH BAR -->
-      <div class="msg-search-bar">
+            <div class="msg-search-bar">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input type="text" id="msgSearch" placeholder='Search by "To:" name…' oninput="filterMessages()"/>
         <button class="msg-search-clear" id="msgSearchClear" onclick="clearMsgSearch()" style="display:none">✕</button>
@@ -162,16 +152,16 @@
     </div>
   </main>
 
-</div><!-- /app-wrapper -->
-
-
+</div>
 <div id="revealOverlay" class="reveal-overlay" onclick="closeReveal()">
 
+    <canvas id="revealCanvas" class="reveal-canvas"></canvas>
 
-  <canvas id="revealCanvas" class="reveal-canvas"></canvas>
+    <div class="lyric-pop-stage" id="lyricPopStage">
+    <div class="lyric-pop-text" id="lyricPopText"></div>
+  </div>
 
-
-  <div class="reveal-card" id="revealCard" onclick="event.stopPropagation()">
+    <div class="reveal-card" id="revealCard" onclick="event.stopPropagation()">
     <button class="reveal-x" onclick="closeReveal()">✕</button>
     <div class="reveal-emoji"    id="revealEmoji"></div>
     <div class="reveal-eyebrow">A message for you</div>
@@ -189,6 +179,20 @@
       </a>
     </div>
     <div class="reveal-delivery" id="revealDelivery"></div>
+  </div>
+</div>
+
+<div id="lyricsOverlay" class="lyrics-overlay">
+  <div class="lyrics-card">
+    <div class="lyrics-header">
+      <div class="lyrics-title">Pick your lines</div>
+      <button class="lyrics-x" onclick="closeLyricsPicker()">✕</button>
+    </div>
+    <div class="lyrics-body" id="lyricsBody"></div>
+    <div class="lyrics-footer">
+      <button class="btn-ghost" onclick="closeLyricsPicker()">Cancel</button>
+      <button class="btn-accent" id="lyricsUseBtn" disabled onclick="confirmLyrics()">Select at least one line</button>
+    </div>
   </div>
 </div>
 
