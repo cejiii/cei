@@ -37,6 +37,8 @@ let selectedSong = null;
 
 let songDebounce = null;
 
+let songSearchController = null;
+
 let hoveredObj = null;
 
 let revealAnim = null;
@@ -434,12 +436,24 @@ function resetForm() {
 
 function debounceSongSearch() {
   clearTimeout(songDebounce);
-  songDebounce = setTimeout(doSongSearch, 340);
+  songDebounce = setTimeout(doSongSearch, 280);
 }
 
 function onSongFocus() {
   const q = document.getElementById("songSearch").value.trim();
   if (q.length > 1) showSongResults(document.getElementById("songResults").__lastData || []);
+}
+
+function dedupeTracks(tracks) {
+  const seen = new Set();
+  const out = [];
+  for (const t of tracks) {
+    const key = `${(t.trackName || "").trim().toLowerCase()}|${(t.artistName || "").trim().toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
 }
 
 async function doSongSearch() {
@@ -451,20 +465,29 @@ async function doSongSearch() {
   }
   el.classList.add("open");
   el.innerHTML = `<div class="song-result-loading"><div class="spin"></div>Searching…</div>`;
+  if (songSearchController) songSearchController.abort();
+  const controller = new AbortController();
+  songSearchController = controller;
   try {
-    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(q)}&entity=song&limit=6&media=music`;
-    const data = await (await fetch(url)).json();
-    el.__lastData = data.results || [];
-    showSongResults(data.results || []);
-  } catch {
-    el.innerHTML = `<div class="song-no-results">Search unavailable. Try again.</div>`;
+    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(q)}&entity=song&limit=16&media=music`;
+    const res = await fetch(url, {
+      signal: controller.signal
+    });
+    const data = await res.json();
+    if (controller.signal.aborted) return;
+    const results = dedupeTracks(data.results || []).slice(0, 8);
+    el.__lastData = results;
+    showSongResults(results);
+  } catch (err) {
+    if (err && err.name === "AbortError") return;
+    el.innerHTML = `<div class="song-no-results">Search unavailable — check your connection and try again.</div>`;
   }
 }
 
 function showSongResults(tracks) {
   const el = document.getElementById("songResults");
   if (!tracks.length) {
-    el.innerHTML = `<div class="song-no-results">No results found.</div>`;
+    el.innerHTML = `<div class="song-no-results">No results — try just the song title, or the artist's name.</div>`;
     return;
   }
   el.innerHTML = tracks.map((t, i) => {
@@ -780,7 +803,7 @@ function showReveal(msg) {
     let seek = 0;
     if (msg.isLyrics && msg.song.lyricAnchorTime != null && msg.song.durationSec) {
       const fraction = clamp(msg.song.lyricAnchorTime / msg.song.durationSec, 0, 1);
-      seek = clamp(fraction * 28, 0, 27);
+      seek = clamp(fraction * 28, 0, 16);
     }
     playSongSnippet(msg.song.previewUrl, seek);
   }
@@ -812,7 +835,7 @@ function playSongSnippet(url, seekTime) {
       audio.volume = v;
       if (v >= 1) clearInterval(fadeIn);
     }, 40);
-    revealAudioFade = setTimeout(fadeOutSongSnippet, 12e3);
+    revealAudioFade = setTimeout(fadeOutSongSnippet, 13e3);
   };
   audio.addEventListener("loadedmetadata", begin, {
     once: true
