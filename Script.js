@@ -16,7 +16,8 @@ function rowToItem(row) {
     style: row.style,
     song: row.song || null,
     opened: row.opened,
-    isLyrics: !!row.is_lyrics
+    isLyrics: !!row.is_lyrics,
+    unlockAt: row.unlock_at ? new Date(row.unlock_at) : null
   };
 }
 
@@ -45,6 +46,77 @@ let revealPhase = 0;
 let sendMode = "message";
 
 let lyricPopTimer = null;
+
+let unlockAt = null;
+
+let soundOn = true;
+
+let audioCtx = null;
+
+let revealAudioFade = null;
+
+function ensureAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === "suspended") audioCtx.resume();
+  return audioCtx;
+}
+
+function toggleSound() {
+  soundOn = !soundOn;
+  document.getElementById("soundToggle").textContent = soundOn ? "🔊" : "🔇";
+  if (soundOn) ensureAudioCtx();
+}
+
+function playTone(freq, duration, type, peakGain) {
+  if (!soundOn) return;
+  const ctx = ensureAudioCtx();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type || "sine";
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(peakGain || 0.18, ctx.currentTime + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start();
+  osc.stop(ctx.currentTime + duration + 0.02);
+}
+
+function playChime() {
+  if (!soundOn) return;
+  [880, 1108, 1318].forEach((f, i) => {
+    setTimeout(() => playTone(f, 0.55, "sine", 0.14), i * 75);
+  });
+}
+
+function playWhoosh() {
+  if (!soundOn) return;
+  const ctx = ensureAudioCtx();
+  const bufferSize = Math.floor(ctx.sampleRate * 0.4);
+  const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+  const noise = ctx.createBufferSource();
+  noise.buffer = buffer;
+  const filter = ctx.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.frequency.setValueAtTime(500, ctx.currentTime);
+  filter.frequency.exponentialRampToValueAtTime(2200, ctx.currentTime + 0.35);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.001, ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.28, ctx.currentTime + 0.05);
+  gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.4);
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  noise.start();
+}
+
+function playLockChime() {
+  if (!soundOn) return;
+  playTone(520, 0.35, "triangle", 0.12);
+}
 
 const STYLE_META = {
   bottle: {
@@ -115,6 +187,61 @@ function updateCount() {
   el.classList.toggle("warn", len > 450);
 }
 
+function onMsgInput() {
+  if (selectedSong && selectedSong.lyricTimings) {
+    selectedSong.lyricTimings = null;
+    selectedSong.lyricAnchorTime = null;
+  }
+  updateCount();
+  livePreview();
+}
+
+let toastTimer = null;
+
+function showToast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2800);
+}
+
+function formatUnlock(date) {
+  return date.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function onUnlockChange() {
+  const val = document.getElementById("unlockAtField").value;
+  const hint = document.getElementById("timelockHint");
+  const clearBtn = document.getElementById("timelockClearBtn");
+  if (!val) {
+    unlockAt = null;
+    hint.textContent = "";
+    hint.classList.remove("warn");
+    clearBtn.style.display = "none";
+    return;
+  }
+  const d = new Date(val);
+  clearBtn.style.display = "flex";
+  if (isNaN(d.getTime()) || d.getTime() <= Date.now()) {
+    unlockAt = null;
+    hint.textContent = "Pick a time in the future";
+    hint.classList.add("warn");
+    return;
+  }
+  unlockAt = d;
+  hint.classList.remove("warn");
+  hint.textContent = `🔒 Opens ${formatUnlock(d)}`;
+}
+
+function clearUnlock() {
+  unlockAt = null;
+  document.getElementById("unlockAtField").value = "";
+  document.getElementById("timelockHint").textContent = "";
+  document.getElementById("timelockHint").classList.remove("warn");
+  document.getElementById("timelockClearBtn").style.display = "none";
+}
+
 function livePreview() {
   const to = document.getElementById("toField").value.trim();
   const msg = document.getElementById("msgField").value.trim();
@@ -149,6 +276,67 @@ document.querySelectorAll(".style-card").forEach(btn => {
   });
 });
 
+function initFlingGesture() {
+  const btn = document.getElementById("sendBtn");
+  const zone = document.getElementById("flingZone");
+  const TAP_MAX = 8;
+  const FLING_MIN = 70;
+  const MAX_DRAG = 130;
+  let dragging = false;
+  let startX = 0;
+  let startY = 0;
+
+  const point = e => e.touches ? e.touches[0] : e;
+
+  const onDown = e => {
+    if (btn.disabled) return;
+    dragging = true;
+    const p = point(e);
+    startX = p.clientX;
+    startY = p.clientY;
+    btn.classList.add("dragging");
+  };
+
+  const onMove = e => {
+    if (!dragging) return;
+    const p = point(e);
+    const dx = p.clientX - startX;
+    const dy = p.clientY - startY;
+    const dist = Math.min(Math.hypot(dx, dy), MAX_DRAG);
+    const angle = Math.atan2(dy, dx);
+    const cx = Math.cos(angle) * dist;
+    const cy = Math.sin(angle) * dist;
+    btn.style.transform = `translate(${cx}px, ${cy}px) rotate(${cx * 0.12}deg)`;
+    zone.classList.toggle("fling-armed", dist > FLING_MIN);
+  };
+
+  const onUp = e => {
+    if (!dragging) return;
+    dragging = false;
+    btn.classList.remove("dragging");
+    zone.classList.remove("fling-armed");
+    const p = point(e.changedTouches ? { clientX: e.changedTouches[0].clientX, clientY: e.changedTouches[0].clientY } : e);
+    const dx = p.clientX - startX;
+    const dy = p.clientY - startY;
+    const dist = Math.hypot(dx, dy);
+    btn.style.transform = "";
+    if (dist <= TAP_MAX || dist > FLING_MIN) {
+      sendMsg();
+    }
+  };
+
+  btn.addEventListener("pointerdown", onDown);
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
+  btn.addEventListener("keydown", e => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      sendMsg();
+    }
+  });
+}
+initFlingGesture();
+
 function setSendMode(mode) {
   sendMode = mode;
   document.querySelectorAll(".mode-btn").forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
@@ -158,6 +346,7 @@ function setSendMode(mode) {
 }
 
 async function sendMsg() {
+  ensureAudioCtx();
   const to = document.getElementById("toField").value.trim();
   const msg = document.getElementById("msgField").value.trim();
   const btn = document.getElementById("sendBtn");
@@ -184,7 +373,8 @@ async function sendMsg() {
     style: selectedStyle,
     song: song,
     opened: false,
-    is_lyrics: sendMode === "lyrics"
+    is_lyrics: sendMode === "lyrics",
+    unlock_at: unlockAt ? unlockAt.toISOString() : null
   }).select().single();
   btn.classList.remove("loading");
   btn.disabled = false;
@@ -197,11 +387,13 @@ async function sendMsg() {
   inbox.unshift(item);
   spawnBgObj(item);
   updateBadge();
+  playWhoosh();
   btn.classList.add("sent");
   btn.querySelector(".send-inner").innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Delivered ✦`;
   const meta = STYLE_META[selectedStyle];
   const songLine = selectedSong ? ` With ♫ "${selectedSong.title}".` : "";
-  document.getElementById("successSub").textContent = `${meta.emoji} "${to}" will receive it via ${meta.label}.${songLine}`;
+  const lockLine = unlockAt ? ` Locked until ${formatUnlock(unlockAt)}.` : "";
+  document.getElementById("successSub").textContent = `${meta.emoji} "${to}" will receive it via ${meta.label}.${songLine}${lockLine}`;
   setTimeout(() => {
     document.getElementById("formArea").style.display = "none";
     document.getElementById("successScreen").classList.add("visible");
@@ -236,6 +428,7 @@ function resetForm() {
   document.getElementById("successScreen").classList.remove("visible");
   document.getElementById("formArea").style.display = "";
   clearSong();
+  clearUnlock();
   setSendMode("message");
 }
 
@@ -292,15 +485,36 @@ function pickSong(idx) {
     artist: t.artistName,
     album: t.collectionName || "",
     art: t.artworkUrl100 || t.artworkUrl60 || "",
-    spotUrl: `https://open.spotify.com/search/${encodeURIComponent(t.trackName + " " + t.artistName)}`
+    spotUrl: `https://open.spotify.com/search/${encodeURIComponent(t.trackName + " " + t.artistName)}`,
+    previewUrl: t.previewUrl || null,
+    durationSec: t.trackTimeMillis ? t.trackTimeMillis / 1e3 : null,
+    includeSnippet: false
   };
   document.getElementById("songSearch").value = `${t.trackName} — ${t.artistName}`;
   document.getElementById("songResults").classList.remove("open");
   document.getElementById("songClearBtn").style.display = "flex";
-  const ss = document.getElementById("songSelected");
-  ss.style.display = "flex";
-  ss.innerHTML = `<img class="ss-art" src="${selectedSong.art}" alt=""/>\n    <div class="ss-info"><div class="ss-title">${selectedSong.title}</div><div class="ss-artist">${selectedSong.artist}</div></div>\n    <button class="ss-lyrics" onclick="openLyricsPicker()">✎ Lyrics</button>\n    <button class="ss-remove" onclick="clearSong()">✕</button>`;
+  renderSongSelected();
   livePreview();
+}
+
+function renderSongSelected() {
+  const ss = document.getElementById("songSelected");
+  if (!selectedSong) {
+    ss.style.display = "none";
+    return;
+  }
+  ss.style.display = "flex";
+  const musicOn = !!selectedSong.includeSnippet;
+  const snippetToggle = selectedSong.previewUrl ? `<button class="ss-snippet${musicOn ? " active" : ""}" onclick="toggleSnippet()">${musicOn ? "🎵 With music" : "🔇 Lyrics only"}</button>` : "";
+  const lyricsBtn = `<button class="ss-lyrics"${musicOn ? ' disabled title="Turn off music to pick lyrics"' : ""} onclick="openLyricsPicker()">✎ Lyrics</button>`;
+  ss.innerHTML = `<img class="ss-art" src="${selectedSong.art}" alt=""/>\n    <div class="ss-info"><div class="ss-title">${selectedSong.title}</div><div class="ss-artist">${selectedSong.artist}</div></div>\n    ${lyricsBtn}\n    ${snippetToggle}\n    <button class="ss-remove" onclick="clearSong()">✕</button>`;
+}
+
+function toggleSnippet() {
+  if (!selectedSong) return;
+  selectedSong.includeSnippet = !selectedSong.includeSnippet;
+  if (selectedSong.includeSnippet && sendMode === "lyrics") setSendMode("message");
+  renderSongSelected();
 }
 
 function clearSong() {
@@ -317,6 +531,25 @@ let lyricLines = [];
 
 let lyricsLoading = false;
 
+let lyricsSynced = false;
+
+function parseLRC(syncedLyrics) {
+  const re = /\[(\d{2}):(\d{2})(?:\.(\d{1,3}))?\]\s*(.*)/;
+  const out = [];
+  syncedLyrics.split("\n").forEach(line => {
+    const m = line.match(re);
+    if (!m) return;
+    const min = +m[1], sec = +m[2];
+    const frac = m[3] ? Number("0." + m[3]) : 0;
+    const text = (m[4] || "").trim();
+    if (text) out.push({
+      time: min * 60 + sec + frac,
+      text: text
+    });
+  });
+  return out;
+}
+
 async function openLyricsPicker() {
   if (!selectedSong) return;
   const overlay = document.getElementById("lyricsOverlay");
@@ -324,29 +557,66 @@ async function openLyricsPicker() {
   overlay.classList.add("open");
   document.body.style.overflow = "hidden";
   lyricsLoading = true;
+  lyricsSynced = false;
   body.innerHTML = `<div class="lyrics-loading"><div class="spin"></div>Fetching lyrics…</div>`;
   try {
-    const url = `https://api.lyrics.ovh/v1/${encodeURIComponent(selectedSong.artist)}/${encodeURIComponent(selectedSong.title)}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("not found");
-    const data = await res.json();
-    const raw = (data.lyrics || "").trim();
-    if (!raw) throw new Error("empty");
-    lyricLines = raw.split("\n").map(l => l.trim()).filter(l => l.length).map(text => ({
-      text: text,
-      checked: false
-    }));
-    if (!lyricLines.length) throw new Error("empty");
-    renderLyricsChecklist();
+    const lrcUrl = `https://lrclib.net/api/get?artist_name=${encodeURIComponent(selectedSong.artist)}&track_name=${encodeURIComponent(selectedSong.title)}`;
+    const lrcRes = await fetch(lrcUrl);
+    if (lrcRes.ok) {
+      const lrcData = await lrcRes.json();
+      if (lrcData.syncedLyrics) {
+        const parsed = parseLRC(lrcData.syncedLyrics);
+        if (parsed.length) {
+          lyricLines = parsed.map(p => ({
+            text: p.text,
+            time: p.time,
+            checked: false
+          }));
+          lyricsSynced = true;
+          renderLyricsChecklist();
+          lyricsLoading = false;
+          return;
+        }
+      }
+      if (lrcData.plainLyrics) {
+        const raw = lrcData.plainLyrics.trim();
+        if (raw) {
+          lyricLines = raw.split("\n").map(l => l.trim()).filter(Boolean).map(text => ({
+            text: text,
+            checked: false
+          }));
+          renderLyricsChecklist();
+          lyricsLoading = false;
+          return;
+        }
+      }
+    }
+    throw new Error("no lrclib match");
   } catch (err) {
-    body.innerHTML = `<div class="lyrics-empty">\n      <div class="empty-icon">🎤</div>\n      <p class="empty-title">No lyrics found</p>\n      <p class="empty-sub">Couldn't find lyrics for "${selectedSong.title}". Try picking another song, or just type your own words.</p>\n    </div>`;
+    try {
+      const url = `https://api.lyrics.ovh/v1/${encodeURIComponent(selectedSong.artist)}/${encodeURIComponent(selectedSong.title)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("not found");
+      const data = await res.json();
+      const raw = (data.lyrics || "").trim();
+      if (!raw) throw new Error("empty");
+      lyricLines = raw.split("\n").map(l => l.trim()).filter(l => l.length).map(text => ({
+        text: text,
+        checked: false
+      }));
+      if (!lyricLines.length) throw new Error("empty");
+      renderLyricsChecklist();
+    } catch (err2) {
+      body.innerHTML = `<div class="lyrics-empty">\n      <div class="empty-icon">🎤</div>\n      <p class="empty-title">No lyrics found</p>\n      <p class="empty-sub">Couldn't find lyrics for "${selectedSong.title}". Try picking another song, or just type your own words.</p>\n    </div>`;
+    }
   }
   lyricsLoading = false;
 }
 
 function renderLyricsChecklist() {
   const body = document.getElementById("lyricsBody");
-  body.innerHTML = `\n    <div class="lyrics-hint">Tap the lines you want to send — you can edit the wording after.</div>\n    <div class="lyrics-list">\n      ${lyricLines.map((l, i) => `\n        <label class="lyric-line${l.checked ? " checked" : ""}" onclick="toggleLyricLine(${i});return false;">\n          <span class="lyric-check">${l.checked ? "✓" : ""}</span>\n          <span class="lyric-text">${escapeHtml(l.text)}</span>\n        </label>\n      `).join("")}\n    </div>`;
+  const hint = lyricsSynced ? "⏱ Synced to this song — tap the lines you want, and the reveal will follow the song's own pacing." : "Tap the lines you want to send — you can edit the wording after.";
+  body.innerHTML = `\n    <div class="lyrics-hint">${hint}</div>\n    <div class="lyrics-list">\n      ${lyricLines.map((l, i) => `\n        <label class="lyric-line${l.checked ? " checked" : ""}" onclick="toggleLyricLine(${i});return false;">\n          <span class="lyric-check">${l.checked ? "✓" : ""}</span>\n          <span class="lyric-text">${escapeHtml(l.text)}</span>\n        </label>\n      `).join("")}\n    </div>`;
   updateLyricsFooter();
 }
 
@@ -368,12 +638,20 @@ function escapeHtml(s) {
 }
 
 function confirmLyrics() {
-  const picked = lyricLines.filter(l => l.checked).map(l => l.text);
+  const picked = lyricLines.filter(l => l.checked);
   if (!picked.length) return;
   const field = document.getElementById("msgField");
-  const addition = picked.join("\n");
+  const addition = picked.map(l => l.text).join("\n");
   field.value = field.value.trim() ? `${field.value.trim()}\n\n${addition}` : addition;
   field.value = field.value.slice(0, 500);
+  if (selectedSong) {
+    const hasTiming = picked.every(l => typeof l.time === "number");
+    selectedSong.lyricTimings = hasTiming ? picked.map(l => ({
+      text: l.text,
+      time: l.time
+    })) : null;
+    selectedSong.lyricAnchorTime = hasTiming ? picked[0].time : null;
+  }
   setSendMode("lyrics");
   updateCount();
   livePreview();
@@ -429,15 +707,22 @@ function renderMessages(filter = "") {
   }
   list.innerHTML = filtered.map((m, i) => {
     const meta = STYLE_META[m.style];
-    const prev = m.message.length > 44 ? m.message.slice(0, 44) + "…" : m.message;
+    const locked = m.unlockAt && m.unlockAt.getTime() > Date.now();
+    const prev = locked ? `Opens ${formatUnlock(m.unlockAt)}` : m.message.length > 44 ? m.message.slice(0, 44) + "…" : m.message;
     const origIdx = inbox.indexOf(m);
     const songLine = m.song ? `<div class="msg-has-song"><svg width="10" height="10" viewBox="0 0 24 24" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>♫ ${m.song.title}</div>` : "";
-    return `<div class="msg-item${m.opened ? " opened" : ""}" onclick="openMessage(${origIdx})"\n               style="animation:slideIn .3s ease ${i * .06}s both;">\n      <span class="msg-emoji">${meta.emoji}</span>\n      <div class="msg-meta">\n        <div class="msg-to-lbl">For <span class="msg-to-name">${m.to}</span> · ${meta.label}</div>\n        <div class="msg-preview${m.opened ? "" : " blur"}">${prev}</div>\n        ${songLine}\n      </div>\n      <span class="msg-arrow">›</span>\n      ${!m.opened ? '<span class="msg-dot"></span>' : ""}\n    </div>`;
+    return `<div class="msg-item${m.opened ? " opened" : ""}${locked ? " locked" : ""}" onclick="openMessage(${origIdx})"\n               style="animation:slideIn .3s ease ${i * .06}s both;">\n      <span class="msg-emoji">${locked ? "🔒" : meta.emoji}</span>\n      <div class="msg-meta">\n        <div class="msg-to-lbl">For <span class="msg-to-name">${m.to}</span> · ${meta.label}</div>\n        <div class="msg-preview${m.opened || locked ? "" : " blur"}">${prev}</div>\n        ${songLine}\n      </div>\n      <span class="msg-arrow">›</span>\n      ${!m.opened && !locked ? '<span class="msg-dot"></span>' : ""}\n    </div>`;
   }).join("");
 }
 
 function openMessage(idx) {
+  ensureAudioCtx();
   const item = inbox[idx];
+  if (item.unlockAt && item.unlockAt.getTime() > Date.now()) {
+    playLockChime();
+    showToast(`🔒 Locked until ${formatUnlock(item.unlockAt)}`);
+    return;
+  }
   if (!item.opened) {
     item.opened = true;
     updateBadge();
@@ -491,15 +776,91 @@ function showReveal(msg) {
   revealCardEl.classList.remove("card-in");
   revealPhase = 0;
   cancelAnimationFrame(revealAnim);
+  if (msg.song && msg.song.previewUrl && msg.song.includeSnippet !== false) {
+    let seek = 0;
+    if (msg.isLyrics && msg.song.lyricAnchorTime != null && msg.song.durationSec) {
+      const fraction = clamp(msg.song.lyricAnchorTime / msg.song.durationSec, 0, 1);
+      seek = clamp(fraction * 28, 0, 27);
+    }
+    playSongSnippet(msg.song.previewUrl, seek);
+  }
   const startCinematic = () => {
     runRevealAnim(msg.style, () => {
       revealCardEl.classList.add("card-in");
+      burstConfetti();
+      playChime();
     });
   };
   if (msg.isLyrics) {
-    playLyricPop(msg.message, startCinematic);
+    const timings = msg.song && Array.isArray(msg.song.lyricTimings) ? msg.song.lyricTimings : null;
+    playLyricPop(msg.message, timings, startCinematic);
   } else {
     startCinematic();
+  }
+}
+
+function playSongSnippet(url, seekTime) {
+  stopSongSnippet();
+  const audio = document.getElementById("revealAudio");
+  const begin = () => {
+    audio.currentTime = seekTime || 0;
+    audio.volume = 0;
+    audio.play().catch(() => {});
+    let v = 0;
+    const fadeIn = setInterval(() => {
+      v = Math.min(1, v + .08);
+      audio.volume = v;
+      if (v >= 1) clearInterval(fadeIn);
+    }, 40);
+    revealAudioFade = setTimeout(fadeOutSongSnippet, 12e3);
+  };
+  audio.addEventListener("loadedmetadata", begin, {
+    once: true
+  });
+  audio.src = url;
+  audio.load();
+}
+
+function fadeOutSongSnippet() {
+  const audio = document.getElementById("revealAudio");
+  const fade = setInterval(() => {
+    const v = Math.max(0, audio.volume - .08);
+    audio.volume = v;
+    if (v <= 0) {
+      clearInterval(fade);
+      audio.pause();
+    }
+  }, 40);
+}
+
+function stopSongSnippet() {
+  clearTimeout(revealAudioFade);
+  const audio = document.getElementById("revealAudio");
+  audio.pause();
+  audio.volume = 0;
+  audio.currentTime = 0;
+}
+
+function burstConfetti() {
+  const container = document.getElementById("revealOverlay");
+  const colors = ["#8b7cf8", "#c084fc", "#38bdf8", "#34d399", "#fbbf24", "#f472b6"];
+  for (let i = 0; i < 34; i++) {
+    const el = document.createElement("div");
+    el.className = "confetti-piece";
+    const size = rand(5, 12);
+    el.style.width = size + "px";
+    el.style.height = size * .4 + "px";
+    el.style.background = colors[randI(0, colors.length - 1)];
+    el.style.left = rand(44, 56) + "%";
+    el.style.top = "36%";
+    const dx = rand(-160, 160);
+    const rot = rand(-360, 360);
+    const dur = rand(900, 1600);
+    el.style.setProperty("--dx", dx + "px");
+    el.style.setProperty("--rot", rot + "deg");
+    el.style.animationDuration = dur + "ms";
+    container.appendChild(el);
+    setTimeout(() => el.remove(), dur + 80);
   }
 }
 
@@ -511,7 +872,7 @@ function fitLyricText(phrase) {
   text.style.fontSize = size + "px";
 }
 
-function playLyricPop(message, onDone) {
+function playLyricPop(message, timings, onDone) {
   const stage = document.getElementById("lyricPopStage");
   const text = document.getElementById("lyricPopText");
   const phrases = message.split("\n").map(l => l.trim()).filter(Boolean);
@@ -519,6 +880,7 @@ function playLyricPop(message, onDone) {
     onDone();
     return;
   }
+  const synced = Array.isArray(timings) && timings.length === phrases.length;
   stage.classList.add("active");
   let pIdx = 0;
   const nextPhrase = () => {
@@ -531,13 +893,23 @@ function playLyricPop(message, onDone) {
     text.innerHTML = "";
     fitLyricText(phrases[pIdx]);
     const words = phrases[pIdx].split(/\s+/).filter(Boolean);
+    let phraseMs;
+    if (synced) {
+      const gapSec = pIdx < phrases.length - 1 ? timings[pIdx + 1].time - timings[pIdx].time : 3.2;
+      phraseMs = clamp(gapSec * 1e3, 900, 5200);
+    } else {
+      phraseMs = Math.min(3600, Math.max(1300, phrases[pIdx].length * 70));
+    }
+    const buildMs = phraseMs * .6;
+    const holdMs = phraseMs - buildMs;
+    const wordGap = Math.max(90, buildMs / Math.max(words.length, 1));
     let wIdx = 0;
     const nextWord = () => {
       if (wIdx >= words.length) {
         lyricPopTimer = setTimeout(() => {
           pIdx++;
           nextPhrase();
-        }, 700);
+        }, holdMs);
         return;
       }
       const span = document.createElement("span");
@@ -546,9 +918,8 @@ function playLyricPop(message, onDone) {
       text.appendChild(span);
       void span.offsetWidth;
       span.classList.add("pop");
-      const wordDwell = Math.min(360, Math.max(140, words[wIdx].length * 32));
       wIdx++;
-      lyricPopTimer = setTimeout(nextWord, wordDwell);
+      lyricPopTimer = setTimeout(nextWord, wordGap);
     };
     nextWord();
   };
@@ -566,6 +937,7 @@ function stopLyricPop() {
 function closeReveal() {
   cancelAnimationFrame(revealAnim);
   stopLyricPop();
+  stopSongSnippet();
   revealOverlay.classList.remove("open");
   revealCardEl.classList.remove("card-in");
   document.body.style.overflow = "";
@@ -1296,7 +1668,8 @@ function drawBg() {
     }
     bgCtx.restore();
     bgCtx.globalAlpha = fadeIn * (obj.msgRef.opened ? .22 : .75);
-    const lbl = obj.label + (obj.msgRef.song ? " ♫" : "");
+    const locked = obj.msgRef.unlockAt && obj.msgRef.unlockAt.getTime() > Date.now();
+    const lbl = (locked ? "🔒 " : "") + obj.label + (obj.msgRef.song ? " ♫" : "");
     bgCtx.font = "600 11px Sora,sans-serif";
     bgCtx.textAlign = "center";
     const lw = bgCtx.measureText(lbl).width;
