@@ -8,7 +8,6 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,500;1,400;1,600&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="style.css"/>
-  <link rel="icon" type="image/png" href="logo.png">
 </head>
 <body>
 
@@ -33,6 +32,7 @@
         Messages
         <span class="badge" id="msgBadge"></span>
       </button>
+      <button class="sound-toggle" id="soundToggle" onclick="toggleSound()" title="Toggle sound" aria-label="Toggle sound">🔊</button>
     </nav>
   </header>
 
@@ -55,10 +55,10 @@
         <label class="field-label" for="msgField"><span class="dot"></span>Message</label>
         <div class="mode-toggle" id="modeToggle">
           <button type="button" class="mode-btn active" data-mode="message" onclick="setSendMode('message')">✍️ Your words</button>
-          <button type="button" class="mode-btn" data-mode="lyrics" onclick="setSendMode('lyrics')">🎵 Song lyrics</button>
+          <button type="button" class="mode-btn" data-mode="lyrics" onclick="setSendMode('lyrics')">🎵 Music</button>
         </div>
         <div class="textarea-wrap">
-          <textarea id="msgField" placeholder="Write something honest, kind, brave — or all three…" maxlength="500" oninput="updateCount();livePreview()"></textarea>
+          <textarea id="msgField" placeholder="Write something honest, kind, brave — or all three…" maxlength="500" oninput="onMsgInput()"></textarea>
           <div class="char-pill" id="charCount">0 / 500</div>
         </div>
       </div>
@@ -94,18 +94,30 @@
         </div>
       </div>
 
+      <div class="field-group">
+        <label class="field-label"><span class="dot" style="background:#38bdf8;box-shadow:0 0 6px #38bdf8;"></span>Time-Lock<span style="color:var(--txt3);font-size:9px;margin-left:2px;text-transform:none;letter-spacing:0;">(optional)</span></label>
+        <div class="timelock-row">
+          <input type="datetime-local" id="unlockAtField" class="timelock-input" oninput="onUnlockChange()"/>
+          <button type="button" class="timelock-clear" id="timelockClearBtn" onclick="clearUnlock()" style="display:none">✕</button>
+        </div>
+        <div class="timelock-hint" id="timelockHint"></div>
+      </div>
+
             <div class="preview-strip">
         <div class="preview-to"  id="previewTo">For <em>someone special</em></div>
         <div class="preview-msg" id="previewMsg">Your message will appear here…</div>
         <div class="preview-song" id="previewSong" style="display:none"></div>
       </div>
 
-            <button class="send-btn" id="sendBtn" onclick="sendMsg()">
-        <span class="send-inner">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-          Send Anonymously
-        </span>
-      </button>
+            <div class="fling-zone" id="flingZone">
+        <button class="send-btn" id="sendBtn">
+          <span class="send-inner">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            Send Anonymously
+          </span>
+        </button>
+        <div class="fling-hint">tap to send — or drag &amp; let go ➤</div>
+      </div>
       <div class="privacy-row">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
         Your identity is never revealed
@@ -127,7 +139,7 @@
   </main>
 
     <main class="panel hidden" id="messagesPanel">
-    <div class="eyebrow">the messages</div>
+    <div class="eyebrow">your messages</div>
     <div class="messages-header">
       <h2 class="panel-title" style="font-size:clamp(20px,5vw,26px);margin:0;">Messages</h2>
             <div class="msg-search-bar">
@@ -157,6 +169,7 @@
 <div id="revealOverlay" class="reveal-overlay" onclick="closeReveal()">
 
     <canvas id="revealCanvas" class="reveal-canvas"></canvas>
+    <audio id="revealAudio" preload="none"></audio>
 
     <div class="lyric-pop-stage" id="lyricPopStage">
     <div class="lyric-pop-text" id="lyricPopText"></div>
@@ -196,6 +209,8 @@
     </div>
   </div>
 </div>
+
+<div id="toast" class="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="script.js"></script>
